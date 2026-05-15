@@ -128,6 +128,49 @@ class AuthService:
 
         return await self.create_google_user(email, google_id=google_id, full_name=full_name)
 
+    async def admin_exists(self) -> bool:
+        """Check if any admin user exists"""
+        query = select(User).where(User.role == "admin")
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none() is not None
+
+    async def create_admin_user(self, email: str, password: str, full_name: Optional[str] = None) -> User:
+        """Create a new admin user"""
+        hashed_password = get_password_hash(password)
+        user = User(
+            email=email,
+            full_name=full_name,
+            hashed_password=hashed_password,
+            role="admin",
+            is_active=True,
+        )
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    async def promote_to_admin(self, user_id: int) -> Optional[User]:
+        """Promote a user to admin role"""
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            return None
+        user.role = "admin"
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    async def demote_from_admin(self, user_id: int) -> Optional[User]:
+        """Demote an admin user to regular user"""
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            return None
+        user.role = "user"
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
